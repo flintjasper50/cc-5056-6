@@ -25,7 +25,28 @@ async function api(path, body) {
   const opt = body ? {method: "POST", headers: {"Content-Type": "application/json"},
                       body: JSON.stringify(body)} : {};
   const r = await fetch(path, opt);
-  return r.json();
+  let data = null;
+  try { data = await r.json(); } catch (e) { data = {}; }
+  if (!r.ok || (data && data.error)) {
+    showError(data.error || `请求失败 (${r.status})`);
+    throw new Error(data.error || r.statusText);
+  }
+  clearError();
+  return data;
+}
+
+const errorBanner = document.getElementById("error-banner");
+const faultBanner = document.getElementById("fault-banner");
+function showError(msg) {
+  errorBanner.textContent = `运算异常：${msg}`;
+  errorBanner.hidden = false;
+}
+function clearError() { errorBanner.hidden = true; }
+function showFault(fault, extra) {
+  if (!fault || fault === "none") { faultBanner.hidden = true; return; }
+  const label = fault === "paper_error" ? "已注入错误底色估计" : "已颠倒混合次序";
+  faultBanner.textContent = extra ? `${label}：${extra}` : label;
+  faultBanner.hidden = false;
 }
 
 function refreshView() {
@@ -36,6 +57,11 @@ function refreshView() {
     canvas.height = img.naturalHeight;
     ctx.drawImage(img, 0, 0);
     if (regionMode && regionPoints.length) drawRegionPreview();
+  };
+  img.onerror = async () => {
+    // 视图运算返回 500 JSON：拉取 /state 取回后端记录的异常信息
+    try { const s = await fetch("/state").then(x => x.json());
+      if (s.last_error) showError(s.last_error); } catch (e) {}
   };
   img.src = url;
   viewName.textContent = viewLabels[currentView] || currentView;
@@ -50,7 +76,11 @@ async function refreshState() {
     const lab = document.getElementById(`v-${k}`);
     if (el) { el.value = v; if (lab) lab.textContent = v; }
   }
-  metricsEl.textContent = JSON.stringify(s.metrics, null, 2);
+  metricsEl.textContent = s.metrics
+    ? JSON.stringify(s.metrics, null, 2)
+    : "指标不可用（运算异常，见顶部提示）";
+  if (s.last_error) showError(s.last_error); else clearError();
+  showFault(s.fault);
 }
 
 function tool() {
@@ -136,7 +166,32 @@ document.getElementById("dark-color").addEventListener("change", async (e) => {
 
 document.getElementById("btn-demo").addEventListener("click", async () => {
   await api("/load/demo", {seed: 7});
+  faultBanner.hidden = true;
   await refreshState(); refreshView();
+});
+document.getElementById("btn-triple").addEventListener("click", async () => {
+  const res = await api("/load/triple", {seed: 23, fault: "none"});
+  showFault("none");
+  if (res.coverage_agreement) {
+    metricsEl.textContent =
+      `两路参照一致性：\n${JSON.stringify(res.coverage_agreement, null, 2)}`;
+  }
+  refreshView();
+});
+document.getElementById("fault-buttons").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-fault]");
+  if (!btn) return;
+  const fault = btn.dataset.fault;
+  document.querySelectorAll("#fault-buttons button").forEach(
+    b => b.classList.toggle("active", b === btn));
+  try {
+    const res = await api("/fault", {fault});
+    showFault(fault, res.order_error_residual
+      ? `重合区残差=${res.order_error_residual.triple_overlap?.toFixed(4)
+         ?? "n/a"}，纯纸区=${res.order_error_residual.clean_paper?.toFixed(4) ?? "n/a"}`
+      : "");
+    await refreshState(); refreshView();
+  } catch (err) { /* 横幅已提示 */ }
 });
 document.getElementById("file-input").addEventListener("change", async (e) => {
   const file = e.target.files[0];

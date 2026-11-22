@@ -60,3 +60,13 @@ pre {
   background: rgba(0,0,0,.55); padding: 4px 10px; border-radius: 4px;
   font-size: 11px; pointer-events: none; display: none;
 }
+.error-banner {
+  background: #5a1f24; color: #ffd7d7; border-bottom: 1px solid #8a2f37;
+  padding: 8px 18px; font-size: 12px;
+}
+.fault-banner {
+  background: #4a3a16; color: #ffe6a8; border-bottom: 1px solid #7a5f24;
+  padding: 8px 18px; font-size: 12px;
+}
+#fault-buttons button.active { background: #b07a2b; border-color: #c9923f; }
+[hidden] { display: none !important; }

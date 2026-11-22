@@ -18,6 +18,10 @@ from .model import Params
 from .pipeline import Project
 from .regions import RegionLayer
 from .synthetic import SyntheticSpec, generate
+from .triple_layer import (
+    TripleSpec, build_triple_scene, inject_paper_error, invert_blend_order,
+    zone_residuals, coverage_agreement,
+)
 from .util import to_float, to_u8, gray_to_u8
 
 
@@ -84,6 +88,68 @@ def cmd_test(args) -> None:
     run_all(Path(args.out))
 
 
+def cmd_triple(args) -> None:
+    """透印/淡墨/网纹三重重合图：两路参照、生产分离、两类受控注错。
+
+    输出可直接在界面画布打开的 PNG，以及分区残差证据 JSON。
+    """
+    import numpy as np
+    from .triple_layer import ZONE_NAMES
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    scene = build_triple_scene(TripleSpec(seed=args.seed))
+    zones = scene["zones"]
+
+    proj = Project(image=scene["image"], paper_override=scene["paper_gt"],
+                   name="triple", params=Params())
+    result = proj.evaluate()
+    views = proj.views()
+
+    Image.fromarray(to_u8(scene["image"])).save(out / "triple_input.png")
+    Image.fromarray(to_u8(scene["paper_gt"])).save(out / "triple_paper_gt.png")
+    Image.fromarray(gray_to_u8(scene["alpha_faint_ref"])).save(
+        out / "triple_alpha_ref.png")
+    Image.fromarray(gray_to_u8(scene["analytic_base"])).save(
+        out / "triple_analytic_base.png")
+    Image.fromarray(to_u8(scene["recomp_ref"])).save(
+        out / "triple_recomp_ref.png")
+    Image.fromarray(gray_to_u8(result["alpha"])).save(
+        out / "triple_alpha_est.png")
+    Image.fromarray(to_u8(views["ink_layer_gray"])).save(
+        out / "triple_ink_layer.png")
+    Image.fromarray(to_u8(views["composite_light"])).save(
+        out / "triple_composite_light.png")
+    # 分区标签可视化（每区一个灰度级），便于人工对应失败区域
+    zone_vis = (zones.astype(np.float32) / max(zones.max(), 1) * 255 + 0.5)
+    Image.fromarray(zone_vis.astype(np.uint8)).save(out / "triple_zones.png")
+
+    # 正常 / 纸色注错 / 次序注错 三套分区残差证据
+    def res_table(paper, alpha, ink):
+        recomp = (1 - alpha[..., None]) * paper + alpha[..., None] * ink
+        mag = np.sqrt(((scene["image"] - recomp) ** 2).sum(axis=2))
+        return zone_residuals(mag, zones)
+
+    evidence = {
+        "coverage_agreement": coverage_agreement(
+            scene["analytic_base"], scene["coverage_ss_geom"]),
+        "baseline_residual": res_table(
+            scene["paper_gt"], result["alpha"], result["ink_color"]),
+        "zone_pixels": {ZONE_NAMES[z]: int((zones == z).sum())
+                        for z in ZONE_NAMES},
+    }
+    wrong_paper = inject_paper_error(scene)
+    bp = Project(image=scene["image"], paper_override=wrong_paper,
+                 params=Params()).evaluate()
+    evidence["paper_error_residual"] = res_table(
+        wrong_paper, bp["alpha"], bp["ink_color"])
+    wrong_order = invert_blend_order(scene)
+    evidence["order_error_residual"] = zone_residuals(
+        np.abs(scene["image"] - wrong_order).mean(axis=2), zones)
+    (out / "triple_evidence.json").write_text(
+        json.dumps(evidence, indent=2, ensure_ascii=False))
+    print(json.dumps(evidence, indent=2, ensure_ascii=False))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="扫描线稿着色合成器")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -108,6 +174,11 @@ def main() -> None:
     t = sub.add_parser("test", help="数值验证套件")
     t.add_argument("--out", default="output/tests")
     t.set_defaults(func=cmd_test)
+
+    tr = sub.add_parser("triple", help="透印/淡墨/网纹三重层注错验收素材")
+    tr.add_argument("--seed", type=int, default=23)
+    tr.add_argument("--out", default="output/triple")
+    tr.set_defaults(func=cmd_triple)
 
     args = ap.parse_args()
     args.func(args)

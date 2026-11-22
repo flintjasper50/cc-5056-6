@@ -19,13 +19,18 @@ from .model import Params
 from .pipeline import Project
 from .regions import RegionLayer
 from .synthetic import SyntheticSpec, generate
+from .triple_layer import (
+    TripleSpec, build_triple_scene, inject_paper_error, invert_blend_order,
+    coverage_agreement, zone_residuals,
+)
 from .util import to_float, to_u8
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 _LOCK = threading.Lock()
 STATE: dict = {"project": None, "view": "composite", "base_color": [0.97, 0.96, 0.93],
-               "dark_color": [0.25, 0.27, 0.32]}
+               "dark_color": [0.25, 0.27, 0.32], "triple": None,
+               "fault": "none", "last_error": None}
 
 
 def _png_bytes(arr: np.ndarray) -> bytes:
@@ -74,11 +79,19 @@ class Handler(BaseHTTPRequestHandler):
                 if proj is None:
                     self._json({"ready": False})
                     return
+                try:
+                    metrics = proj.metrics()
+                    STATE["last_error"] = None
+                except Exception as exc:  # 运算异常经界面提示，不返回 500 崩页
+                    STATE["last_error"] = f"{type(exc).__name__}: {exc}"
+                    metrics = None
                 self._json({"ready": True, "params": proj.params.to_dict(),
                             "view": STATE["view"],
                             "base_color": STATE["base_color"],
                             "dark_color": STATE["dark_color"],
-                            "metrics": proj.metrics(),
+                            "metrics": metrics,
+                            "fault": STATE.get("fault", "none"),
+                            "last_error": STATE["last_error"],
                             "shape": list(proj.image.shape[:2])})
             return
         if route == "/view":
@@ -87,7 +100,13 @@ class Handler(BaseHTTPRequestHandler):
                 if STATE["project"] is None:
                     self._send(404, b"no project", "text/plain")
                     return
-                views = _current_views()
+                try:
+                    views = _current_views()
+                    STATE["last_error"] = None
+                except Exception as exc:  # 实际运算失败：显式提示而非黑屏
+                    STATE["last_error"] = f"{type(exc).__name__}: {exc}"
+                    self._json({"error": STATE["last_error"]}, 500)
+                    return
                 if name not in views:
                     self._send(404, b"unknown view", "text/plain")
                     return
@@ -124,16 +143,75 @@ class Handler(BaseHTTPRequestHandler):
                 raw = base64.b64decode(payload["png_b64"])
                 img = to_float(Image.open(io.BytesIO(raw)))
                 STATE["project"] = Project(image=img, name="upload")
+                STATE["triple"] = None
+                STATE["fault"] = "none"
+                STATE["last_error"] = None
                 self._json({"ok": True})
+                return
+            if route == "/load/triple":
+                # 回归样例：透印/淡墨/网纹三重重合图，带独立参照与分区
+                scene = build_triple_scene(TripleSpec(
+                    seed=int(payload.get("seed", 23))))
+                paper = scene["paper_gt"]
+                fault = payload.get("fault", "none")
+                if fault == "paper_error":
+                    paper = inject_paper_error(scene)
+                proj = Project(image=scene["image"], paper_override=paper,
+                               name="triple")
+                STATE["project"] = proj
+                STATE["triple"] = scene
+                STATE["fault"] = fault
+                STATE["last_error"] = None
+                self._json({"ok": True, "fault": fault,
+                            "zones": {str(int(k)): int((scene["zones"] == k).sum())
+                                      for k in np.unique(scene["zones"])},
+                            "coverage_agreement": coverage_agreement(
+                                scene["analytic_base"],
+                                scene["coverage_ss_geom"])})
+                return
+            if route == "/fault":
+                # 在已载入的三重层样例上切换受控注错，重新分离
+                scene = STATE.get("triple")
+                if scene is None:
+                    self._json({"error": "请先载入三重层回归样例"}, 400)
+                    return
+                fault = payload.get("fault", "none")
+                if fault == "order_error":
+                    # 次序注错改变的是参照重合成，观测不变；保存证据供前端查看
+                    STATE["fault"] = fault
+                    wrong = invert_blend_order(scene)
+                    table = zone_residuals(
+                        np.abs(scene["image"] - wrong).mean(axis=2),
+                        scene["zones"])
+                    STATE["last_error"] = None
+                    self._json({"ok": True, "fault": fault,
+                                "order_error_residual": table})
+                    return
+                paper = scene["paper_gt"]
+                if fault == "paper_error":
+                    paper = inject_paper_error(scene)
+                proj = Project(image=scene["image"], paper_override=paper,
+                               name="triple")
+                STATE["project"] = proj
+                STATE["fault"] = fault
+                STATE["last_error"] = None
+                self._json({"ok": True, "fault": fault})
                 return
             proj = STATE["project"]
             if proj is None:
                 self._json({"error": "no project"}, 400)
                 return
             if route == "/params":
-                proj.params = Params.from_dict(payload)
-                proj.invalidate()
-                self._json({"ok": True, "metrics": proj.metrics()})
+                try:
+                    proj.params = Params.from_dict(payload)
+                    proj.invalidate()
+                    metrics = proj.metrics()
+                    STATE["last_error"] = None
+                except Exception as exc:
+                    STATE["last_error"] = f"{type(exc).__name__}: {exc}"
+                    self._json({"error": STATE["last_error"]}, 500)
+                    return
+                self._json({"ok": True, "metrics": metrics})
                 return
             if route == "/mark":
                 pts = [(float(x), float(y)) for x, y in payload.get("points", [])]
