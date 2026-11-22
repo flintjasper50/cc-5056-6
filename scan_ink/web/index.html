@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>扫描线稿着色合成器</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>扫描线稿着色合成器</h1>
+  <div class="actions">
+    <button id="btn-demo">载入合成素材</button>
+    <label class="file-btn">上传扫描图
+      <input type="file" id="file-input" accept="image/*" hidden>
+    </label>
+    <button id="btn-clear-marks">清除标记</button>
+    <button id="btn-save">保存工程</button>
+  </div>
+</header>
+
+<main>
+  <aside class="panel">
+    <section>
+      <h2>视图</h2>
+      <div class="grid-view" id="view-buttons">
+        <button data-view="original">原件</button>
+        <button data-view="paper_field">纸色场 P</button>
+        <button data-view="confidence">可信度 c</button>
+        <button data-view="ink_layer_gray">墨层（中灰底）</button>
+        <button data-view="alpha">覆盖率 alpha</button>
+        <button data-view="coverage">几何覆盖 a</button>
+        <button data-view="strength">笔触强度 t</button>
+        <button data-view="composite_light">浅底重铺</button>
+        <button data-view="composite_dark">深底重铺</button>
+        <button data-view="composite">最终着色</button>
+        <button data-view="region_layer">区域颜色层</button>
+        <button data-view="recomp_orig">原底重建</button>
+        <button data-view="residual_heat">残差热图</button>
+        <button data-view="missing_heat">失墨热图</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>画笔标记</h2>
+      <div class="row">
+        <label><input type="radio" name="tool" value="nav" checked> 浏览</label>
+        <label><input type="radio" name="tool" value="reliable"> 可靠纸区</label>
+        <label><input type="radio" name="tool" value="protect"> 保护细节</label>
+      </div>
+      <div class="row">
+        <label>笔径 <input type="range" id="brush" min="3" max="40" value="12"></label>
+      </div>
+      <p class="hint">可靠纸区：补充纸面观测；保护细节：强制保留浅笔触。标记只作用于评估，原件不被改写。</p>
+    </section>
+
+    <section>
+      <h2>模型参数（改后自动重算）</h2>
+      <label>纸色扩散半径 <span id="v-paper_radius"></span>
+        <input type="range" data-k="paper_radius" min="2" max="16" step="1"></label>
+      <label>可靠纸区分位 <span id="v-grain_quantile"></span>
+        <input type="range" data-k="grain_quantile" min="0.5" max="0.99" step="0.01"></label>
+      <label>纸纹门限 k <span id="v-grain_sigma_k"></span>
+        <input type="range" data-k="grain_sigma_k" min="0.5" max="6" step="0.1"></label>
+      <label>笔触窗口半径 <span id="v-strength_radius"></span>
+        <input type="range" data-k="strength_radius" min="2" max="15" step="1"></label>
+      <label>墨色暗分位 <span id="v-ink_dark_fraction"></span>
+        <input type="range" data-k="ink_dark_fraction" min="0.005" max="0.1" step="0.005"></label>
+    </section>
+
+    <section>
+      <h2>重铺底色</h2>
+      <div class="row">
+        <label>浅底 <input type="color" id="light-color" value="#f7f5ed"></label>
+        <label>深底 <input type="color" id="dark-color" value="#404552"></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>区域颜色</h2>
+      <label>颜色 <input type="color" id="region-color" value="#e8b88c"></label>
+      <p class="hint">在画布上单击添加多边形顶点，双击闭合生成区域（位于墨层之下）。</p>
+      <button id="btn-region">开始/闭合区域</button>
+    </section>
+
+    <section>
+      <h2>指标</h2>
+      <pre id="metrics">未载入</pre>
+    </section>
+  </aside>
+
+  <div class="stage">
+    <div class="canvas-wrap">
+      <canvas id="canvas" width="512" height="384"></canvas>
+      <div id="overlay" class="overlay-hint"></div>
+    </div>
+    <div class="stage-bar">
+      <span id="view-name">最终着色</span>
+      <span id="coord"></span>
+    </div>
+  </div>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

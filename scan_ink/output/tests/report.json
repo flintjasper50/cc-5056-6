@@ -1,0 +1,68 @@
+{
+  "01_standard": {
+    "mae_rgb": 0.014706827700138092,
+    "p99_rgb_err": 0.04424937069416046,
+    "max_rgb_err": 0.11498983949422836,
+    "alpha_coverage": 0.09798685709635417,
+    "alpha_mae": 0.003370646620169282,
+    "alpha_weak_recall": 0.9252769351005554,
+    "alpha_weak_detected": 0.9458955223880597,
+    "weak_stroke_recall": 0.9252769351005554,
+    "thin_pixels": 3780,
+    "thin_mean_ratio": 0.9846217036247253,
+    "thin_missed_fraction": 0.0,
+    "ink_color_max_err": 0.013725489377975464
+  },
+  "02_gt_paper": {
+    "mae_rgb": 0.003803868545219302,
+    "p99_rgb_err": 0.05098039284348488,
+    "max_rgb_err": 0.1267973780632019,
+    "alpha_coverage": 0.058074951171875,
+    "alpha_mae": 0.0008180523291230202,
+    "alpha_weak_recall": 0.9067488312721252,
+    "alpha_weak_detected": 0.951865671641791,
+    "weak_stroke_recall": 0.9067488312721252
+  },
+  "03_rebase_missing_ink": {
+    "missing_mean": 0.013576332479715347,
+    "missing_p99": 0.028667369857430458,
+    "missing_over_5pct_fraction": 0.0005849202473958334,
+    "strict_gate_weak_recall": 0.3631702959537506,
+    "strict_gate_missing_lift": 1.5690007209777832
+  },
+  "04_fringe": {
+    "mae_rgb": 0.014581763185560703,
+    "p99_rgb_err": 0.045175932347774506,
+    "max_rgb_err": 0.11619506031274796,
+    "alpha_coverage": 0.09498087565104167,
+    "alpha_mae": 0.0032466843258589506,
+    "alpha_weak_recall": 0.9258586764335632,
+    "alpha_weak_detected": 0.9492537313432836,
+    "edge_pixels": 8397,
+    "halo_on_dark_fraction": 0.0
+  },
+  "05_multiply_baseline_drift": {
+    "multiply_clean_region_drift": 0.004795958753675222,
+    "model_clean_region_drift": 0.00035347347147762775,
+    "drift_ratio": 13.568086831599103
+  },
+  "06_binarization_damage": {
+    "weak_pixels_destroyed_fraction": 1.0,
+    "alpha_mae_binary": 0.01189557183533907,
+    "alpha_mae_model": 0.003370646620169282
+  },
+  "07_recompute": {
+    "original_unchanged": true,
+    "alpha_changes_with_params": true,
+    "alpha_mean_k1_5": 0.03818449750542641,
+    "alpha_mean_k6_0": 0.03253514692187309
+  },
+  "08_user_marks": {
+    "weak_stroke_recall": 0.9264196753501892,
+    "baseline_weak_recall": 0.9252769351005554,
+    "protected_weak_pixels": 408,
+    "protected_weak_mean_alpha_ratio": 0.9956380724906921,
+    "protected_region_mean_alpha": 0.12995952367782593,
+    "original_unchanged": true
+  }
+}

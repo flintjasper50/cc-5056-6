@@ -23,3 +23,7 @@ __pycache__/
 *.log
 .env
 .env.*
+
+# Scan compositor local runs and saved projects
+/scan_ink/output/run/
+/scan_ink/output/saved_project/
